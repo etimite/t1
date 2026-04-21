@@ -472,7 +472,7 @@
     
                 marker_4ffa839ade7fd0df09f712fb1f593434.setIcon(div_icon_4bed274d8dbb6af89ad2e68799ede656);
 
-    
+map_eb1e039ac74546b5045717629e789161.doubleClickZoom.disable();    
 var clickCount = 0;
 var clickTimer = null;
     
@@ -513,6 +513,7 @@ var clickTimer = null;
         else {
             clearTimeout(clickTimer); // 팝업 예약 취소(폭파!)
                 clickCount = 0; // 카운트 초기화
+            map_eb1e039ac74546b5045717629e789161.setZoomAround(e.latlng, map_eb1e039ac74546b5045717629e789161.getZoom() + 1);
             }
         });
 
