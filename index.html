@@ -479,7 +479,7 @@
             var lng = e.latlng.lng;
 
             // 2. 네이버 지도 검색창에 위도,경도를 쳐서 검색하는 URL 만들기
-            var naverMapUrl = `https://m.map.naver.com/search2/search.naver?query=${lat},${lng}`;
+            var naverMapUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
             
             // (참고용) 카카오맵으로 열고 싶을 경우의 URL
             // var kakaoMapUrl = `https://map.kakao.com/link/map/선택한위치,${lat},${lng}`;
