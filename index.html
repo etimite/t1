@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>시료채취 지도 (자동 영역 맞춤)</title>
+    <title>시료채취 지도 (모바일 완벽 최적화)</title>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.79.0/L.Control.Locate.min.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.79.0/L.Control.Locate.min.js"></script>
+
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
         #map { position: absolute; top: 0; bottom: 0; right: 0; left: 0; }
@@ -15,6 +17,13 @@
             position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 9999;
             padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #FF3B30; 
             color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        /* 🌟 글씨가 터치를 방해하지 않도록 완전 투명화(클릭 무시) */
+        .jibun-text {
+            font-size: 10pt; color: white; font-weight: bold; 
+            text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black; 
+            text-align: center; white-space: nowrap;
+            pointer-events: none; /* CSS로도 한 번 더 터치 통과 설정 */
         }
     </style>
 </head>
@@ -24,17 +33,15 @@
     <button id="iphone-compass-btn">🧭 아이폰 나침반 허용하기</button>
 
     <script>
-        // [1] 지도 초기화 (초기 위치를 설정하지 않고 엔진만 켭니다)
+        // [1] 지도 초기화 (드래그, 기본 더블클릭 줌 모두 정상 작동함)
         var map = L.map('map', {
             zoomSnap: 0,
             zoomDelta: 0.5
         });
 
-        // [2] VWORLD 타일 레이어
         L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD' }).addTo(map);
         L.tileLayer('https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD_Hybrid' }).addTo(map);
 
-        // [3] 내 위치 찾기 버튼
         L.control.locate({
             position: 'topleft', showCompass: true,
             locateOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
@@ -42,25 +49,26 @@
             compassStyle: { fillColor: '#FF3B30', fillOpacity: 0.8, weight: 1.5, color: 'white', radius: 8 }
         }).addTo(map);
 
-        // [4] 데이터 동적 로딩 및 자동 위치 조정
+        // [2] 데이터 로딩 및 마커 투명화 처리
         var geojsonFileName = '16.geojson'; 
 
         fetch(geojsonFileName)
             .then(response => response.json())
             .then(data => {
-                // GeoJSON 레이어 생성
                 var geojsonLayer = L.geoJson(data, {
+                    // 🌟 폴리곤 테두리도 터치를 통과시키도록 설정
                     style: function(feature) {
-                        return { color: 'red', weight: 3, fillColor: 'transparent' };
+                        return { color: 'red', weight: 3, fillColor: 'transparent', interactive: false };
                     },
                     onEachFeature: function(feature, layer) {
                         var jibun = feature.properties.JIBUN || 'N/A';
                         var center = layer.getBounds().getCenter();
                         
                         L.marker(center, {
+                            interactive: false, // 🌟 핵심: 마커 박스가 터치를 가로채지 않고 지도에 양보함!
                             icon: L.divIcon({
                                 className: 'empty',
-                                html: `<div style="font-size: 10pt; color: white; font-weight: bold; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black; text-align: center; white-space: nowrap;">${jibun}</div>`,
+                                html: `<div class="jibun-text">${jibun}</div>`,
                                 iconSize: [150, 36],
                                 iconAnchor: [75, 18]
                             })
@@ -68,176 +76,55 @@
                     }
                 }).addTo(map);
                 
-                // 🌟 핵심: 로드된 데이터의 전체 영역을 계산해서 지도를 맞춤
-                var bounds = geojsonLayer.getBounds();
-                map.fitBounds(bounds, {
-                    padding: [50, 50] // 화면 가장자리에 약간의 여백을 줌
-                });
+                map.fitBounds(geojsonLayer.getBounds(), { padding: [50, 50] });
             })
-            .catch(error => {
-                console.error("데이터 로드 실패:", error);
-                // 파일 로드 실패 시 대비한 기본 위치 (강남구청)
-                map.setView([37.4959, 127.0664], 16);
-            });
+            .catch(console.error);
 
-        // [5] 클릭/더블클릭 통제 시스템
-        map.doubleClickZoom.disable();    
-        var clickCount = 0;
+        // =====================================================================
+        // [3] 스마트 클릭 & 드래그 통제 시스템 (드래그 충돌 완벽 해결)
+        // =====================================================================
         var clickTimer = null;
-        
+
+        // 한 번 터치할 때
         map.on('click', function(e) {
-            clickCount++;
-            if (clickCount === 1) {
-                clickTimer = setTimeout(function() {
-                    clickCount = 0;
-                    var lat = e.latlng.lat;
-                    var lng = e.latlng.lng;
-                    var naverMapUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
-                    var popupContent = `
-                        <div style="text-align: center; padding: 5px;">
-                            <span style="font-size: 13px; color: #666;">지번 확인</span><br><br>
-                            <a href="${naverMapUrl}" target="_blank" rel="noreferrer noopener" style="padding: 10px 15px; background-color: #03C75A; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                                📗 네이버 지도 보기
-                            </a>
-                        </div>`;
-                    L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map); 
-                }, 400); 
-            } else {
-                clearTimeout(clickTimer);
-                clickCount = 0;
-                map.setZoomAround(e.latlng, map.getZoom() + 1);
-            }
-        });
-
-        // [6] 아이폰 나침반 스크립트
-        document.getElementById('iphone-compass-btn').addEventListener('click', function() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === 'granted') {
-                            alert('✅ 센서 활성화 완료! 내 위치 버튼을 눌러주세요.');
-                            this.style.display = 'none'; 
-                        }
-                    })
-                    .catch(console.error);
-            } else {
-                this.style.display = 'none';
-            }
-        });
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>시료채취 지도 (자동 영역 맞춤)</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.79.0/L.Control.Locate.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-locatecontrol/0.79.0/L.Control.Locate.min.js"></script>
-    <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
-        #map { position: absolute; top: 0; bottom: 0; right: 0; left: 0; }
-        #iphone-compass-btn {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 9999;
-            padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #FF3B30; 
-            color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-    </style>
-</head>
-<body>
-
-    <div id="map"></div>
-    <button id="iphone-compass-btn">🧭 아이폰 나침반 허용하기</button>
-
-    <script>
-        // [1] 지도 초기화 (초기 위치를 설정하지 않고 엔진만 켭니다)
-        var map = L.map('map', {
-            zoomSnap: 0,
-            zoomDelta: 0.5
-        });
-
-        // [2] VWORLD 타일 레이어
-        L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD' }).addTo(map);
-        L.tileLayer('https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD_Hybrid' }).addTo(map);
-
-        // [3] 내 위치 찾기 버튼
-        L.control.locate({
-            position: 'topleft', showCompass: true,
-            locateOptions: { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
-            markerStyle: { fillColor: '#007AFF', fillOpacity: 1.0, weight: 2, color: 'white', radius: 8 },
-            compassStyle: { fillColor: '#FF3B30', fillOpacity: 0.8, weight: 1.5, color: 'white', radius: 8 }
-        }).addTo(map);
-
-        // [4] 데이터 동적 로딩 및 자동 위치 조정
-        var geojsonFileName = '16.geojson'; 
-
-        fetch(geojsonFileName)
-            .then(response => response.json())
-            .then(data => {
-                // GeoJSON 레이어 생성
-                var geojsonLayer = L.geoJson(data, {
-                    style: function(feature) {
-                        return { color: 'red', weight: 3, fillColor: 'transparent' };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        var jibun = feature.properties.JIBUN || 'N/A';
-                        var center = layer.getBounds().getCenter();
-                        
-                        L.marker(center, {
-                            icon: L.divIcon({
-                                className: 'empty',
-                                html: `<div style="font-size: 10pt; color: white; font-weight: bold; text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black; text-align: center; white-space: nowrap;">${jibun}</div>`,
-                                iconSize: [150, 36],
-                                iconAnchor: [75, 18]
-                            })
-                        }).addTo(map);
-                    }
-                }).addTo(map);
+            // 이전에 실행 대기 중인 타이머가 있다면 끄기
+            if (clickTimer !== null) clearTimeout(clickTimer);
+            
+            // 0.3초(300ms)만 기다렸다가 팝업 띄우기
+            clickTimer = setTimeout(function() {
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
                 
-                // 🌟 핵심: 로드된 데이터의 전체 영역을 계산해서 지도를 맞춤
-                var bounds = geojsonLayer.getBounds();
-                map.fitBounds(bounds, {
-                    padding: [50, 50] // 화면 가장자리에 약간의 여백을 줌
-                });
-            })
-            .catch(error => {
-                console.error("데이터 로드 실패:", error);
-                // 파일 로드 실패 시 대비한 기본 위치 (강남구청)
-                map.setView([37.4959, 127.0664], 16);
-            });
+                // 모바일에서 더 안정적인 카카오맵과 네이버 지도를 함께 제공
+                var kakaoPinUrl = `https://map.kakao.com/link/map/선택지점,${lat},${lng}`;
+                var naverPinUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
 
-        // [5] 클릭/더블클릭 통제 시스템
-        map.doubleClickZoom.disable();    
-        var clickCount = 0;
-        var clickTimer = null;
-        
-        map.on('click', function(e) {
-            clickCount++;
-            if (clickCount === 1) {
-                clickTimer = setTimeout(function() {
-                    clickCount = 0;
-                    var lat = e.latlng.lat;
-                    var lng = e.latlng.lng;
-                    var naverMapUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
-                    var popupContent = `
-                        <div style="text-align: center; padding: 5px;">
-                            <span style="font-size: 13px; color: #666;">지번 확인</span><br><br>
-                            <a href="${naverMapUrl}" target="_blank" rel="noreferrer noopener" style="padding: 10px 15px; background-color: #03C75A; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-                                📗 네이버 지도 보기
-                            </a>
-                        </div>`;
-                    L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map); 
-                }, 400); 
-            } else {
-                clearTimeout(clickTimer);
-                clickCount = 0;
-                map.setZoomAround(e.latlng, map.getZoom() + 1);
-            }
+                var popupContent = `
+                    <div style="text-align: center; padding: 5px;">
+                        <span style="font-size: 13px; color: #666;">지번 확인</span><br><br>
+                        <a href="${kakaoPinUrl}" target="_blank" rel="noreferrer noopener" style="padding: 10px; background-color: #FEE500; color: #191919; text-decoration: none; border-radius: 6px; font-weight: bold; display: block; margin-bottom: 8px;">
+                            💬 카카오맵으로 보기
+                        </a>
+                        <a href="${naverPinUrl}" target="_blank" rel="noreferrer noopener" style="padding: 10px; background-color: #03C75A; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; display: block;">
+                            📗 네이버 지도로 보기
+                        </a>
+                    </div>`;
+                L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
+            }, 300); 
         });
 
-        // [6] 아이폰 나침반 스크립트
+        // 두 번 연속 터치(더블클릭) 할 때
+        map.on('dblclick', function(e) {
+            // 팝업을 띄우려던 타이머를 즉시 폭파시킴!
+            if (clickTimer !== null) {
+                clearTimeout(clickTimer);
+                clickTimer = null;
+            }
+            // 💡 따로 코드를 안 짜도, 지도가 알아서 부드럽게 1단계 확대됩니다.
+        });
+
+
+        // [4] 아이폰 나침반 스크립트
         document.getElementById('iphone-compass-btn').addEventListener('click', function() {
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
