@@ -86,8 +86,24 @@
         map.doubleClickZoom.disable();  
         var clickTimer = null;
         var clickCount = 0; // 🌟 우리가 직접 터치 횟수를 셉니다!
+        var isPopupOpen = false;
+
+        map.on('popupopen', function() {
+            isPopupOpen = true; // 팝업 열림!
+        });
+
+        map.on('popupclose', function() {
+            // 팝업이 닫히자마자 스위치를 꺼버리면, 닫기 위해 누른 클릭이 '새 팝업'을 띄울 수 있습니다.
+            // 그래서 스위치를 끄는 데 아주 약간의 딜레이(0.1초)를 줍니다.
+            setTimeout(function() {
+                isPopupOpen = false; // 팝업 닫힘!
+            }, 100);
+        });
 
         map.on('click', function(e) {
+
+            if (isPopupOpen) return;
+            
             clickCount++; 
 
             if (clickCount === 1) {
