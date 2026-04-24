@@ -58,10 +58,19 @@
                 var geojsonLayer = L.geoJson(data, {
                     // 🌟 폴리곤 테두리도 터치를 통과시키도록 설정
                     style: function(feature) {
-                        return { color: 'red', weight: 3, fillColor: 'transparent', interactive: false };
+                        return { color: 'red', weight: 3, fillColor: 'transparent', interactive: true };
                     },
                     onEachFeature: function(feature, layer) {
                         var jibun = feature.properties.JIBUN || 'N/A';
+
+                        var popupHTML = `
+                            <div style="text-align: center; padding: 10px;">
+                                <span style="font-size: 12px; color: #888;">해당 구역 지번</span><br>
+                                <strong style="font-size: 16px; color: #FF3B30;">${jibun}</strong>
+                            </div>
+                        `;
+                        layer.bindPopup(popupContent);
+                        
                         var center = layer.getBounds().getCenter();
                         
                         L.marker(center, {
