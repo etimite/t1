@@ -97,7 +97,6 @@
                     var lat = e.latlng.lat;
                     var lng = e.latlng.lng;
                     
-                    var kakaoPinUrl = `https://map.kakao.com/link/map/선택지점,${lat},${lng}`;
                     var naverPinUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
 
                     var popupContent = `
@@ -112,10 +111,11 @@
                 }, 300); // 💡 핵심: 아이폰 터치 딜레이를 고려해 300으로 늘림!
                 
             } else if (clickCount >= 2) {
-                // 0.4초 안에 두 번 터치됨! (더블클릭 감지)
+                // 0.3초 안에 두 번 터치됨! (더블클릭 감지)
+                map(e.latlng, map.getZoom() + 1);
                 clearTimeout(clickTimer); // 팝업이 뜨려는 것을 즉시 취소(폭파)시킴!
                 clickCount = 0; // 횟수 초기화
-                map(e.latlng, map.getZoom() + 1);
+                
                 
                 // 따로 확대 명령을 안 내려도, Leaflet의 기본 확대 기능이 알아서 작동합니다.
             }
