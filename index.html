@@ -90,7 +90,7 @@
             clickCount++; 
 
             if (clickCount === 1) {
-                // 첫 번째 터치: 0.4초(400ms) 동안 두 번째 터치가 오는지 기다려줍니다.
+                // 첫 번째 터치: 0.3초(300ms) 동안 두 번째 터치가 오는지 기다려줍니다.
                 clickTimer = setTimeout(function() {
                     clickCount = 0; // 타이머가 끝나면 횟수 초기화
                     
@@ -109,12 +109,13 @@
                         </div>`;
                     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
                     
-                }, 400); // 💡 핵심: 아이폰 터치 딜레이를 고려해 400으로 늘림!
+                }, 300); // 💡 핵심: 아이폰 터치 딜레이를 고려해 300으로 늘림!
                 
             } else if (clickCount >= 2) {
                 // 0.4초 안에 두 번 터치됨! (더블클릭 감지)
                 clearTimeout(clickTimer); // 팝업이 뜨려는 것을 즉시 취소(폭파)시킴!
                 clickCount = 0; // 횟수 초기화
+                map(e.latlng, map.getZoom() + 1);
                 
                 // 따로 확대 명령을 안 내려도, Leaflet의 기본 확대 기능이 알아서 작동합니다.
             }
