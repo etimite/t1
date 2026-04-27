@@ -133,7 +133,7 @@
                         </div>`;
                     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
                     
-                }, 300); // 💡 핵심: 아이폰 터치 딜레이를 고려해 300으로 늘림!
+                }, 150); // 💡 핵심: 아이폰 터치 딜레이를 고려해 300으로 늘림!
                 
             } else if (clickCount >= 2) {
                 // 0.3초 안에 두 번 터치됨! (더블클릭 감지)
