@@ -19,12 +19,11 @@
             padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #FF3B30; 
             color: white; border: none; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        /* 🌟 글씨가 터치를 방해하지 않도록 완전 투명화(클릭 무시) */
         .jibun-text {
             font-size: 10pt; color: white; font-weight: bold; 
             text-shadow: -1px 0 black, 0 1px black, 1px 0 black, 0 -1px black; 
             text-align: center; white-space: nowrap;
-            pointer-events: none; /* CSS로도 한 번 더 터치 통과 설정 */
+            pointer-events: none; 
         }
     </style>
 </head>
@@ -34,11 +33,8 @@
     <button id="iphone-compass-btn">🧭 아이폰 나침반 허용하기</button>
 
     <script>
-        // [1] 지도 초기화 (드래그, 기본 더블클릭 줌 모두 정상 작동함)
-        var map = L.map('map', {
-            zoomSnap: 0,
-            zoomDelta: 0.5
-        });
+        // [1] 지도 초기화
+        var map = L.map('map', { zoomSnap: 0, zoomDelta: 0.5 });
 
         L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD' }).addTo(map);
         L.tileLayer('https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19, attribution: 'VWORLD_Hybrid' }).addTo(map);
@@ -50,40 +46,86 @@
             compassStyle: { fillColor: '#FF3B30', fillOpacity: 0.8, weight: 1.5, color: 'white', radius: 8 }
         }).addTo(map);
 
-        // [2] 데이터 로딩 및 마커 투명화 처리
+        // =====================================================================
+        // [2] 데이터 로딩 (1번 땅 보험용 팝업 복구 완료)
+        // =====================================================================
         var geojsonFileName = '16.geojson'; 
+        
+        var activeSubLayer = null;
+        var activeSubMarker = null;
 
         fetch(geojsonFileName)
             .then(response => response.json())
             .then(data => {
                 var geojsonLayer = L.geoJson(data, {
-                    // 🌟 폴리곤 테두리도 터치를 통과시키도록 설정
+                    // 🎨 1. 디자인 분리
                     style: function(feature) {
-                        return { color: 'red', weight: 3, fillColor: 'transparent', interactive: true };
+                        var isMain = feature.properties.is_main;
+                        var isTarget = (isMain === undefined || isMain === 1); 
+
+                        if (isTarget) {
+                            // 🌟 주인공: 팝업창 터치 인식을 위해 interactive를 다시 true로 설정합니다.
+                            return { color: 'red', weight: 3, fillColor: 'transparent', interactive: true };
+                        } else {
+                            return { color: 'transparent', weight: 0, fillColor: 'transparent', fillOpacity: 0, interactive: true };
+                        }
                     },
+                    
+                    // 🏷️ 2. 마커 및 팝업 설정
                     onEachFeature: function(feature, layer) {
                         var jibun = feature.properties.JIBUN || 'N/A';
-
-                        var popupHTML = `
-                            <div style="text-align: center; margin: 2px;">
-                                <strong style="font-size: 16px; color: #FF3B30;">${jibun}</strong>
-                            </div>
-                        `;
-                        layer.bindPopup(popupHTML);
                         
                         var pointInside = turf.pointOnFeature(feature);
-                        // Turf는 [경도, 위도] 순서이므로 Leaflet에 맞게 [위도, 경도]로 뒤집어줌
                         var center = [pointInside.geometry.coordinates[1], pointInside.geometry.coordinates[0]];
-                        
-                        L.marker(center, {
-                            interactive: false, // 🌟 핵심: 마커 박스가 터치를 가로채지 않고 지도에 양보함!
-                            icon: L.divIcon({
-                                className: 'empty',
-                                html: `<div class="jibun-text">${jibun}</div>`,
-                                iconSize: [150, 36],
-                                iconAnchor: [75, 18]
-                            })
-                        }).addTo(map);
+
+                        var isMain = feature.properties.is_main;
+                        var isTarget = (isMain === undefined || isMain === 1);
+
+                        if (isTarget) {
+                            // 🌟 [복구] 1번 땅 클릭 시 지번을 크게 띄워줄 보험용 팝업 결합
+                            var popupHTML = `
+                                <div style="text-align: center; margin: 2px;">
+                                    <strong style="font-size: 16px; color: #FF3B30;">${jibun}</strong>
+                                </div>
+                            `;
+                            layer.bindPopup(popupHTML);
+
+                            // 상시 표시용 하얀 글씨 마커도 그대로 유지
+                            L.marker(center, {
+                                interactive: false, 
+                                icon: L.divIcon({
+                                    className: 'empty',
+                                    html: `<div class="jibun-text">${jibun}</div>`,
+                                    iconSize: [150, 36],
+                                    iconAnchor: [75, 18]
+                                })
+                            }).addTo(map);
+                            
+                        } else {
+                            // 2번 주변 땅: 클릭 시 파란 선과 파란 글씨 띄우기
+                            layer.on('click', function(e) {
+                                L.DomEvent.stopPropagation(e); 
+
+                                if (activeSubLayer) {
+                                    activeSubLayer.setStyle({ color: 'transparent', weight: 0 });
+                                    map.removeLayer(activeSubMarker);
+                                }
+
+                                layer.setStyle({ color: '#007AFF', weight: 3 });
+                                
+                                activeSubMarker = L.marker(center, {
+                                    interactive: false,
+                                    icon: L.divIcon({
+                                        className: 'empty',
+                                        html: `<div class="jibun-text" style="color: #007AFF; text-shadow: -1px 0 white, 0 1px white, 1px 0 white, 0 -1px white;">${jibun}</div>`,
+                                        iconSize: [150, 36],
+                                        iconAnchor: [75, 18]
+                                    })
+                                }).addTo(map);
+
+                                activeSubLayer = layer; 
+                            });
+                        }
                     }
                 }).addTo(map);
                 
@@ -91,40 +133,37 @@
             })
             .catch(console.error);
 
+
         // =====================================================================
-        // [3] 스마트 클릭 & 드래그 통제 시스템 (드래그 충돌 완벽 해결)
+        // [3] 스마트 클릭 & 드래그 통제 시스템
         // =====================================================================
         map.doubleClickZoom.disable();  
         var clickTimer = null;
-        var clickCount = 0; // 🌟 우리가 직접 터치 횟수를 셉니다!
+        var clickCount = 0; 
         var isPopupOpen = false;
 
-        map.on('popupopen', function() {
-            isPopupOpen = true; // 팝업 열림!
-        });
-
-        map.on('popupclose', function() {
-            // 팝업이 닫히자마자 스위치를 꺼버리면, 닫기 위해 누른 클릭이 '새 팝업'을 띄울 수 있습니다.
-            // 그래서 스위치를 끄는 데 아주 약간의 딜레이(0.1초)를 줍니다.
-            setTimeout(function() {
-                isPopupOpen = false; // 팝업 닫힘!
-            }, 100);
-        });
+        map.on('popupopen', function() { isPopupOpen = true; });
+        map.on('popupclose', function() { setTimeout(function() { isPopupOpen = false; }, 100); });
 
         map.on('click', function(e) {
-
             if (isPopupOpen) return;
+
+            if (activeSubLayer) {
+                activeSubLayer.setStyle({ color: 'transparent', weight: 0 });
+                map.removeLayer(activeSubMarker);
+                activeSubLayer = null;
+                activeSubMarker = null;
+                return; 
+            }
             
             clickCount++; 
 
             if (clickCount === 1) {
-                // 첫 번째 터치: 0.3초(300ms) 동안 두 번째 터치가 오는지 기다려줍니다.
                 clickTimer = setTimeout(function() {
-                    clickCount = 0; // 타이머가 끝나면 횟수 초기화
+                    clickCount = 0; 
                     
                     var lat = e.latlng.lat;
                     var lng = e.latlng.lng;
-                    
                     var naverPinUrl = `https://m.map.naver.com/map.naver?lat=${lat}&lng=${lng}&title=선택지점`;
 
                     var popupContent = `
@@ -135,16 +174,12 @@
                         </div>`;
                     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
                     
-                }, 150); // 💡 핵심: 아이폰 터치 딜레이를 고려해 300으로 늘림!
+                }, 150); 
                 
             } else if (clickCount >= 2) {
-                // 0.3초 안에 두 번 터치됨! (더블클릭 감지)
                 map.setZoomAround(e.latlng, map.getZoom() + 1);
-                clearTimeout(clickTimer); // 팝업이 뜨려는 것을 즉시 취소(폭파)시킴!
-                clickCount = 0; // 횟수 초기화
-                
-                
-                // 따로 확대 명령을 안 내려도, Leaflet의 기본 확대 기능이 알아서 작동합니다.
+                clearTimeout(clickTimer); 
+                clickCount = 0; 
             }
         });
 
